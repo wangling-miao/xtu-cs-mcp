@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "xtu-cs": {
+      "url": "https://xtu-cs-mcp.<你的账号>.workers.dev/c075e7ea-d09c-47f4-a20c-b7d66fe7cbfc/mcp"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+name = "xtu-cs-mcp"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+
+# 部署后如需更换密钥：改这里，重新 deploy，并同步客户端 URL。
+[vars]
+ACCESS_UUID = "c075e7ea-d09c-47f4-a20c-b7d66fe7cbfc"
