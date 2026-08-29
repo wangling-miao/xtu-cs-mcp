@@ -17,7 +17,7 @@ const PROTOCOL = "2025-03-26";
 const SERVER_INFO = {
   name: "xtu-cs-mcp",
   title: "湘潭大学计算机学院检索",
-  version: "1.1.0",
+  version: "1.2.0",
 };
 
 const TOOLS = [
@@ -80,40 +80,75 @@ export default {
       return cors(new Response(null, { status: 204 }));
     }
 
+    // 不带 UUID 的 /health 只用来确认 Worker 已部署，不暴露密钥路径。
+    if (
+      request.method === "GET" &&
+      parts.length === 1 &&
+      parts[0].toLowerCase() === "health"
+    ) {
+      return cors(
+        json({
+          ok: true,
+          service: SERVER_INFO.name,
+          version: SERVER_INFO.version,
+          hint: "MCP 地址是 /<ACCESS_UUID>/mcp ，type 选 http / streamableHttp，不要选 sse",
+        })
+      );
+    }
+
     if (parts[0]?.toLowerCase() !== uuid) {
       return new Response("Not Found", { status: 404 });
     }
 
     const rest = parts.slice(1).join("/") || "";
+    const isMcpPath =
+      rest === "" ||
+      rest === "health" ||
+      rest === "mcp" ||
+      rest === "sse" ||
+      rest === "message" ||
+      rest === "messages" ||
+      rest === "mcp/sse" ||
+      rest === "mcp/message" ||
+      rest === "mcp/messages";
 
-    if (rest === "" || rest === "health") {
+    if (!isMcpPath) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    if (
+      request.method === "GET" &&
+      (rest === "" || rest === "health") &&
+      !acceptsEventStream(request)
+    ) {
       return cors(
         json({
           ok: true,
           service: SERVER_INFO.name,
           version: SERVER_INFO.version,
           mcp: `/${uuid}/mcp`,
+          hint: "type 选 streamableHttp / http，不要选 sse",
         })
       );
     }
 
-    if (rest === "mcp" || rest === "sse") {
-      if (request.method === "GET") {
-        return cors(
-          json({
-            message: "XTU CS MCP. POST JSON-RPC to this path.",
-            protocol: "MCP Streamable HTTP",
-            protocolVersion: PROTOCOL,
-          })
-        );
-      }
-      if (request.method !== "POST") {
-        return cors(new Response("Method Not Allowed", { status: 405 }));
-      }
-      return handleMcp(request);
+    if (request.method === "GET") {
+      return cors(
+        new Response("Method Not Allowed. Use POST JSON-RPC (Streamable HTTP).", {
+          status: 405,
+          headers: { Allow: "POST, OPTIONS", "Content-Type": "text/plain; charset=utf-8" },
+        })
+      );
     }
 
-    return new Response("Not Found", { status: 404 });
+    if (request.method === "DELETE") {
+      return cors(new Response(null, { status: 405, headers: { Allow: "POST, OPTIONS" } }));
+    }
+
+    if (request.method !== "POST") {
+      return cors(new Response("Method Not Allowed", { status: 405 }));
+    }
+    return handleMcp(request);
   },
 };
 
@@ -371,8 +406,7 @@ async function getArticle(input) {
   const html = await res.text();
   const title =
     strip((html.match(/<title>([\s\S]*?)<\/title>/i) || [, ""])[1])
-      .replace(/-?计算机学院·网络空间安全学院$/,
-        "")
+      .replace(/-?计算机学院·网络空间安全学院$/, "")
       .trim() || target;
   const text = extractMain(html);
   const attachments = extractAttachments(html, target);
@@ -489,6 +523,11 @@ function json(data, status = 200) {
     status,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
+}
+
+function acceptsEventStream(request) {
+  const accept = request.headers.get("Accept") || "";
+  return /text\/event-stream/i.test(accept);
 }
 
 function cors(res) {
